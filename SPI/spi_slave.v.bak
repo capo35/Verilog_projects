@@ -1,0 +1,80 @@
+module Spi_slave (
+    input MOSI,clk,reset_n,ss_n,
+    output reg MISO,
+    input [7:0] tx_data,
+    input tx_valid,
+    output reg [9 :0] rx_data,
+    output reg rx_valid
+);
+reg [9:0] QR_next, QR_reg;
+reg [7:0] QT_next, QT_reg;
+reg [3:0] s_next,s_reg ;
+reg [3:0] t_next,t_reg ;
+    
+            // Sequential logic for registers
+    always @(posedge clk , negedge reset_n) begin
+        if(!reset_n)begin
+        rx_valid<=0;
+        rx_data<=0;
+        s_reg<=0;
+        QR_reg<=0;
+        QT_reg<=0;
+        t_reg<=0; 
+        MISO<=0;   
+        end
+        else begin
+        QR_reg<=QR_next;
+        QT_reg<=QT_next;
+        s_reg<=s_next;
+        t_reg<=t_next;    
+        end
+        end
+            // Combinational logic for shifting and control
+    always @(*) begin
+   // QT_next=tx_data;
+    QR_next = QR_reg;
+    QT_next = QT_reg;
+    s_next = s_reg;
+    t_next = t_reg;    
+    rx_valid=0;
+    rx_data=0;    
+    MISO=0;
+            if(!ss_n) begin
+                // Receive data from MOSI (Master Out, Slave In)
+                if(s_reg<2) begin 
+                    QR_next={ MOSI,QR_reg[9 :1] };      //! no
+                    s_next=s_reg+1;
+                end 
+                else if(s_reg<10) begin
+                  QR_next={ QR_reg[9:8] , QR_reg{7:1}, MOSI };      //! no
+                  s_next=s_reg+1;  
+                end
+                else begin
+                  QR_reg= { QR_reg[9:8], QR_reg[0:7] }; 
+                  rx_data=QR_reg;
+                  rx_valid=1'b1;
+                  s_next=0;  
+                end
+                    // ? tx data
+                if(tx_valid)  begin // Transmit data on MISO (Master In, Slave Out)
+                    if (t_reg == 0) begin
+                    QT_next = tx_data;           // Load tx_data into QT_reg at the start
+                    end
+                    if(t_reg<8) begin
+                    MISO=QT_reg[7];
+                    QT_next={QT_reg[6:0],1'b0};
+                    t_next=t_reg+1;     
+                    end
+                    else
+                    MISO=0;             
+                end  
+            end
+            else begin  // If ss_n is inactive, reset the MISO line and counters
+            rx_valid=0;
+            MISO=0;
+            s_next = 0;
+            t_next = 0;    
+            end
+             
+    end    
+endmodule
